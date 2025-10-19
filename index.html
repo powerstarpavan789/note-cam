@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>NoteCam — Fullscreen — GPS + District/Mandal/Village</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg1:#041226; --bg2:#071431;
+    --accent:#06b6d4; --accent2:#3b82f6;
+    --panel: rgba(6,12,20,0.55);
+    --muted:#b9c6d2;
+    --glass: rgba(255,255,255,0.04);
+    --radius:14px;
+    --ui-gap:12px;
+  }
+
+  html,body{height:100%;margin:0;font-family:'Poppins',system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale}
+  body{
+    background: linear-gradient(180deg,var(--bg1),var(--bg2));
+    color:#eaf4fb;
+    display:flex;
+    align-items:stretch;
+    justify-content:center;
+    padding:0;
+    height:100vh;
+    overflow:hidden;
+  }
+
+  /* Fullscreen app container */
+  .app{
+    width:100%;
+    height:100vh;
+    display:flex;
+    flex-direction:column;
+    gap:var(--ui-gap);
+    padding:10px;
+    box-sizing:border-box;
+  }
+
+  /* Top bar */
+  .topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+    padding:6px 8px;
+    background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.04));
+    border-radius:12px;
+    border:1px solid rgba(255,255,255,0.02);
+    box-shadow:0 6px 18px rgba(0,0,0,0.4);
+  }
+  .title{font-weight:600;font-size:16px}
+  .subtitle{font-size:12px;color:var(--muted)}
+
+  /* Viewer: fills remaining area */
+  .viewer{
+    position:relative;
+    flex:1;
+    border-radius:16px;
+    overflow:hidden;
+    background:#000;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  video{width:100%;height:100%;object-fit:cover;display:block}
+  canvas{display:block;width:100%;height:100%}
+
+  /* Floating overlay bottom-left */
+  .floating-overlay{
+    position:absolute;
+    left:12px;
+    bottom:12px;
+    background: linear-gradient(180deg, rgba(2,6,10,0.6), rgba(2,6,10,0.36));
+    padding:8px 10px;
+    border-radius:10px;
+    backdrop-filter: blur(6px);
+    color:#eaf4fb;
+    font-size:13px;
+    border:1px solid rgba(255,255,255,0.04);
+    max-width:68%;
+    line-height:1.18;
+  }
+  .floating-overlay .title{font-weight:600;margin-bottom:6px}
+  .floating-overlay .line{font-size:12.5px;color:var(--muted)}
+
+  /* Controls bottom row */
+  .controls{
+    display:flex;
+    gap:10px;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .controls-left{display:flex;gap:10px;align-items:center}
+  .btn{
+    appearance:none;border:0;padding:12px 14px;border-radius:12px;background:var(--panel);color:inherit;font-size:15px;cursor:pointer;
+    box-shadow:0 8px 24px rgba(0,0,0,0.45);
+    display:inline-flex;align-items:center;gap:8px;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn-primary{
+    background:linear-gradient(90deg,var(--accent),var(--accent2));
+    color:#021220;font-weight:600;border:none;
+  }
+  .btn-ghost{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted)}
+
+  /* Permission gate: full overlay until user taps enable */
+  .permission-gate{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:40;padding:16px;
+    background:linear-gradient(180deg, rgba(2,6,10,0.35), rgba(0,0,0,0.55));
+  }
+  .gate-card{
+    width:100%;max-width:420px;background:linear-gradient(180deg, rgba(7,12,25,0.96), rgba(4,9,18,0.9));
+    border-radius:14px;padding:20px;text-align:center;border:1px solid rgba(255,255,255,0.03);
+    box-shadow:0 18px 50px rgba(0,0,0,0.6);
+  }
+  .gate-card h2{margin:0 0 8px;font-size:20px}
+  .gate-card p{color:var(--muted);margin:8px 0 16px;font-size:14px}
+
+  /* Modal after capture (inputs) */
+  .modal-backdrop{
+    position:fixed;inset:0;background:linear-gradient(180deg, rgba(2,6,10,0.6), rgba(0,0,0,0.65));display:flex;align-items:center;justify-content:center;z-index:60;
+  }
+  .modal{
+    width:92%;max-width:500px;background:linear-gradient(180deg, rgba(6,11,20,0.98), rgba(3,6,12,0.96));
+    border-radius:12px;padding:16px;border:1px solid rgba(255,255,255,0.03);
+  }
+  .modal h3{margin:0 0 8px}
+  .field{margin-bottom:10px}
+  label.small{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+  input, textarea {
+    width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);background:rgba(255,255,255,0.02);color:inherit;font-size:14px;box-sizing:border-box;
+  }
+  textarea{resize:vertical;min-height:64px}
+
+  .meta-row{display:flex;gap:8px;align-items:center}
+  .meta-left{font-size:13px;color:var(--muted)}
+
+  /* small screens */
+  @media (max-width:420px){
+    .floating-overlay{max-width:86%}
+    .gate-card{padding:16px}
+  }
+</style>
+</head>
+<body>
+  <div class="app" role="application" aria-label="NoteCam fullscreen">
+    <div class="topbar">
+      <div>
+        <div class="title">NoteCam</div>
+        <div class="subtitle">Local capture — GPS overlay</div>
+      </div>
+      <div class="meta-left" id="camStatus">Camera: <span id="camStatText">disabled</span></div>
+    </div>
+
+    <div class="viewer" id="viewer">
+      <!-- Permission gate -->
+      <div class="permission-gate" id="permissionGate" aria-hidden="false">
+        <div class="gate-card" role="dialog" aria-labelledby="gateTitle">
+          <h2 id="gateTitle">Enable camera</h2>
+          <p>Tap "Enable Camera" to allow access. You may also allow location when prompted for GPS overlay.</p>
+          <div style="display:flex;gap:10px;justify-content:center">
+            <button id="enableCameraBtn" class="btn btn-primary">Enable Camera</button>
+            <button id="dismissGate" class="btn btn-ghost">Not now</button>
+          </div>
+          <p style="font-size:12px;color:var(--muted);margin-top:12px">If permission is denied, enable camera from browser settings.</p>
+        </div>
+      </div>
+
+      <!-- Live video and canvas -->
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="previewCanvas" style="display:none"></canvas>
+
+      <!-- Floating overlay -->
+      <div class="floating-overlay" id="floatingOverlay" style="display:none" aria-live="polite">
+        <div class="title">Live • GPS & Status</div>
+        <div class="line" id="floatTime">Time: —</div>
+        <div class="line" id="floatGps">GPS: acquiring…</div>
+        <div class="line" id="floatAccuracy"></div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="controls-left">
+        <button id="switchBtn" class="btn">🔁 Switch</button>
+        <button id="captureBtn" class="btn btn-primary">📸 Take Photo</button>
+        <button id="retakeBtn" class="btn" style="display:none">↺ Retake</button>
+        <button id="downloadBtn" class="btn" style="display:none">⬇️ Download</button>
+      </div>
+      <div style="font-size:13px;color:var(--muted)">Location: <span id="locVal">not acquired</span></div>
+    </div>
+  </div>
+
+  <!-- Modal (hidden by default) — shown after capture to ask District/Mandal/Village/Description -->
+  <div id="fieldsModal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal">
+      <h3 id="modalTitle">Add details</h3>
+      <div class="field">
+        <label class="small">District</label>
+        <input id="district" type="text" placeholder="Enter district name" />
+      </div>
+      <div class="field">
+        <label class="small">Mandal</label>
+        <input id="mandal" type="text" placeholder="Enter mandal name" />
+      </div>
+      <div class="field">
+        <label class="small">Village</label>
+        <input id="village" type="text" placeholder="Enter village name" />
+      </div>
+      <div class="field">
+        <label class="small">Description / Note</label>
+        <textarea id="noteText" placeholder="Add a short note or title..."></textarea>
+      </div>
+
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
+        <button id="modalCancel" class="btn btn-ghost">Cancel</button>
+        <button id="modalSave" class="btn btn-primary">Save & Embed</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(async function(){
+  // Elements
+  const video = document.getElementById('video');
+  const previewCanvas = document.getElementById('previewCanvas');
+  const captureBtn = document.getElementById('captureBtn');
+  const retakeBtn = document.getElementById('retakeBtn');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const switchBtn = document.getElementById('switchBtn');
+  const permissionGate = document.getElementById('permissionGate');
+  const enableCameraBtn = document.getElementById('enableCameraBtn');
+  const dismissGate = document.getElementById('dismissGate');
+  const floatingOverlay = document.getElementById('floatingOverlay');
+  const floatGps = document.getElementById('floatGps');
+  const floatTime = document.getElementById('floatTime');
+  const floatAccuracy = document.getElementById('floatAccuracy');
+  const camStatText = document.getElementById('camStatText');
+  const locVal = document.getElementById('locVal');
+
+  const fieldsModal = document.getElementById('fieldsModal');
+  const modalSave = document.getElementById('modalSave');
+  const modalCancel = document.getElementById('modalCancel');
+  const districtInput = document.getElementById('district');
+  const mandalInput = document.getElementById('mandal');
+  const villageInput = document.getElementById('village');
+  const noteText = document.getElementById('noteText');
+
+  let stream = null;
+  let currentFacing = 'environment';
+  let lastPosition = null;
+  let watchId = null;
+  let baseImageData = null;
+
+  // update time
+  function updateTime(){ floatTime.textContent = 'Time: ' + new Date().toLocaleString(); }
+  setInterval(updateTime, 1000);
+
+  // Location watch
+  function startLocationWatch(){
+    if(!navigator.geolocation){
+      locVal.textContent = 'not supported';
+      floatGps.textContent = 'GPS: not supported';
+      return;
+    }
+    locVal.textContent = 'acquiring…';
+    floatGps.textContent = 'GPS: acquiring…';
+    if(watchId !== null) navigator.geolocation.clearWatch(watchId);
+    watchId = navigator.geolocation.watchPosition(pos=>{
+      lastPosition = pos;
+      updateLocText();
+    }, err=>{
+      locVal.textContent = 'unavailable';
+      floatGps.textContent = 'GPS: unavailable';
+    }, { enableHighAccuracy: true, maximumAge:8000, timeout:12000 });
+  }
+  function stopLocationWatch(){ if(watchId !== null){ navigator.geolocation.clearWatch(watchId); watchId = null; } }
+
+  function updateLocText(){
+    if(!lastPosition){ locVal.textContent = 'not acquired'; floatGps.textContent = 'GPS: not acquired'; floatAccuracy.textContent = ''; return; }
+    const c = lastPosition.coords;
+    locVal.textContent = `Lat:${c.latitude.toFixed(6)}, Lon:${c.longitude.toFixed(6)}, ±${Math.round(c.accuracy)}m`;
+    floatGps.textContent = `Lat: ${c.latitude.toFixed(6)} • Lon: ${c.longitude.toFixed(6)}`;
+    floatAccuracy.textContent = `Accuracy: ±${Math.round(c.accuracy)}m`;
+  }
+
+  // Start camera
+  async function startCamera(){
+    try {
+      stopCamera();
+      camStatText.textContent = 'starting…';
+      const constraints = { video: { facingMode: { ideal: currentFacing }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false };
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+      video.srcObject = stream;
+      await video.play();
+      camStatText.textContent = 'ready';
+      floatingOverlay.style.display = 'block';
+    } catch (err) {
+      camStatText.textContent = 'error';
+      console.error('camera error', err);
+      alert('Camera error: ' + (err && err.message ? err.message : err));
+    }
+  }
+  function stopCamera(){
+    if(stream){ stream.getTracks().forEach(t=>t.stop()); stream = null; }
+    camStatText.textContent = 'disabled';
+    floatingOverlay.style.display = 'none';
+  }
+
+  // Permission gate handlers
+  enableCameraBtn.addEventListener('click', async ()=>{
+    try {
+      await startCamera();
+      // hide gate
+      permissionGate.style.display = 'none';
+      // start GPS watch (browser may prompt)
+      startLocationWatch();
+    } catch(e){ /* handled in startCamera */ }
+  });
+  dismissGate.addEventListener('click', ()=>{
+    permissionGate.style.display = 'none';
+    camStatText.textContent = 'disabled';
+  });
+
+  // Switch camera
+  switchBtn.addEventListener('click', async ()=>{
+    currentFacing = currentFacing === 'environment' ? 'user' : 'environment';
+    if(stream) await startCamera();
+  });
+
+  // Capture -> show preview and modal for fields
+  captureBtn.addEventListener('click', async ()=>{
+    if(!stream){
+      alert('Camera not enabled. Tap Enable Camera first.');
+      return;
+    }
+    const vw = video.videoWidth || 1280;
+    const vh = video.videoHeight || 720;
+    previewCanvas.width = vw;
+    previewCanvas.height = vh;
+    const ctx = previewCanvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, vw, vh);
+    baseImageData = ctx.getImageData(0,0,vw,vh);
+
+    // pause camera preview UI
+    video.style.display = 'none';
+    previewCanvas.style.display = 'block';
+    captureBtn.style.display = 'none';
+    retakeBtn.style.display = 'inline-flex';
+    downloadBtn.style.display = 'inline-flex';
+
+    // stop camera to save battery
+    stopCamera();
+
+    // If we don't have GPS, attempt a one-time getCurrentPosition (fast)
+    if(navigator.geolocation && !lastPosition){
+      navigator.geolocation.getCurrentPosition(pos=>{ lastPosition = pos; updatePreviewOverlay(); updateLocText(); }, ()=>{}, { enableHighAccuracy:true, timeout:10000 });
+    }
+
+    // show modal to ask district/mandal/village/description
+    openFieldsModal();
+  });
+
+  // Retake resets to live camera
+  retakeBtn.addEventListener('click', async ()=>{
+    previewCanvas.style.display = 'none';
+    video.style.display = 'block';
+    captureBtn.style.display = 'inline-flex';
+    retakeBtn.style.display = 'none';
+    downloadBtn.style.display = 'none';
+    // restart camera and gps
+    await startCamera();
+    startLocationWatch();
+  });
+
+  // Modal functions
+  function openFieldsModal(){
+    // populate with previous values if any (keeps continuity)
+    // (inputs already persist since DOM elements remain)
+    fieldsModal.style.display = 'flex';
+    // focus first input
+    setTimeout(()=> districtInput.focus(), 120);
+  }
+  function closeFieldsModal(){ fieldsModal.style.display = 'none'; }
+
+  modalCancel.addEventListener('click', ()=>{
+    // user cancelled — we still allow download without fields or user can retake
+    closeFieldsModal();
+    // draw overlay (with whatever fields present)
+    updatePreviewOverlay();
+  });
+
+  modalSave.addEventListener('click', ()=>{
+    // save fields and draw onto canvas
+    closeFieldsModal();
+    updatePreviewOverlay();
+  });
+
+  // draw overlay onto canvas
+  function roundRectPath(ctx,x,y,w,h,r){
+    const radius = Math.min(r, w/2, h/2);
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.arcTo(x + w, y, x + w, y + h, radius);
+    ctx.arcTo(x + w, y + h, x, y + h, radius);
+    ctx.arcTo(x, y + h, x, y, radius);
+    ctx.arcTo(x, y, x + w, y, radius);
+    ctx.closePath();
+  }
+
+  function updatePreviewOverlay(){
+    const c = previewCanvas;
+    if(!c) return;
+    const ctx = c.getContext('2d');
+    if(baseImageData) ctx.putImageData(baseImageData, 0, 0);
+    else ctx.drawImage(video, 0, 0, c.width, c.height);
+
+    const padding = Math.round(c.width * 0.015) + 8;
+    const fontSize = Math.round(c.width * 0.018) + 6;
+    ctx.font = `${fontSize}px Poppins, sans-serif`;
+    ctx.textBaseline = 'top';
+    // use semi-transparent block
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+
+    const lines = [];
+    const now = new Date();
+    lines.push('Time: ' + now.toLocaleString());
+    if(lastPosition && lastPosition.coords){
+      const coords = lastPosition.coords;
+      lines.push(`Latitude: ${coords.latitude.toFixed(6)}`);
+      lines.push(`Longitude: ${coords.longitude.toFixed(6)}`);
+      if(coords.altitude !== null && coords.altitude !== undefined) lines.push(`Altitude: ${coords.altitude.toFixed(1)}m`);
+      lines.push(`Accuracy: ±${Math.round(coords.accuracy)}m`);
+    } else {
+      lines.push('GPS: Not available');
+    }
+    if(districtInput.value) lines.push('District: ' + districtInput.value);
+    if(mandalInput.value) lines.push('Mandal: ' + mandalInput.value);
+    if(villageInput.value) lines.push('Village: ' + villageInput.value);
+    if(noteText.value) lines.push('Note: ' + noteText.value);
+
+    // measure width
+    let maxW = 0;
+    for(const l of lines){ const w = ctx.measureText(l).width; if(w > maxW) maxW = w; }
+    const boxW = maxW + padding*2;
+    const boxH = lines.length * (fontSize + 6) + padding;
+    const boxX = padding;
+    const boxY = c.height - boxH - padding;
+
+    // background rounded rect
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    roundRectPath(ctx, boxX - 6, boxY - 6, boxW + 12, boxH + 12, 14);
+    ctx.fill();
+    ctx.restore();
+
+    // draw text
+    ctx.fillStyle = 'white';
+    let y = boxY + padding/2;
+    for(const l of lines){
+      ctx.fillText(l, boxX + padding/1.6, y);
+      y += fontSize + 6;
+    }
+
+    // enable download button
+    downloadBtn.style.display = 'inline-flex';
+  }
+
+  // download the canvas image (apply overlay first)
+  downloadBtn.addEventListener('click', ()=>{
+    updatePreviewOverlay();
+    previewCanvas.toBlob(blob=>{
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'notecam_' + Date.now() + '.png';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      // feedback
+      downloadBtn.textContent = '✅ Saved';
+      setTimeout(()=> downloadBtn.textContent = '⬇️ Download', 1400);
+    }, 'image/png', 0.95);
+  });
+
+  // ensure overlay updates while user types if preview shown
+  [districtInput,mandalInput,villageInput,noteText].forEach(el=>{
+    el.addEventListener('input', ()=>{ if(previewCanvas.style.display === 'block') updatePreviewOverlay(); });
+  });
+
+  // lifecycle: stop on pagehide
+  window.addEventListener('pagehide', ()=>{ stopCamera(); stopLocationWatch(); });
+
+  // initial permission hint
+  async function checkPermissionsHint(){
+    if(!navigator.permissions) return;
+    try {
+      const camPerm = await navigator.permissions.query({name:'camera'});
+      if(camPerm && camPerm.state === 'denied'){
+        enableCameraBtn.textContent = 'Allow in browser settings';
+      }
+    } catch(e){}
+  }
+  checkPermissionsHint();
+
+  // initial time update
+  updateTime();
+
+  // make app "feel" fullscreen on mobile (try to request orientation/sticky)
+  // Note: browsers limit programmatic fullscreen/orientation — we avoid forcing it.
+})();
+</script>
+</body>
+</html>
